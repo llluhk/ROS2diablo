@@ -39,12 +39,16 @@ class EscapeBehaviorNode(Node):
     def execute_escape_behavior(self, prediction):
         self.clear_timers()
 
-        if prediction == 1 and self.escape_enabled:
-            self.get_logger().info("Collision detected and escape enabled: escaping!")
-            self.publish_modified_motion(forward=-0.5)  # Override forward only
-            self.escape_timer = self.create_timer(0.5, self.stop_motion)
-        elif prediction == 1:
-            self.get_logger().info("Collision detected but escape is not enabled.")
+        if prediction > 0:
+            collision_type = {1: "Front", 2: "Left", 3: "Right"}.get(prediction, "Unknown")
+            self.get_logger().info(f"⚠️ Collision predicted: {collision_type} (Code: {prediction})")
+
+            if self.escape_enabled:
+                self.get_logger().info("Escape behavior triggered: moving backward.")
+                self.publish_modified_motion(forward=-0.5)  # Move backward
+                self.escape_timer = self.create_timer(0.5, self.stop_motion)  # Stop after 0.5s
+            else:
+                self.get_logger().info("Escape is disabled. No motion command sent.")
 
     def stop_motion(self):
         self.clear_timers()

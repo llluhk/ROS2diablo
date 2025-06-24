@@ -10,8 +10,8 @@ class DataProcessingNode(Node):
         super().__init__('data_processing_node')
 
         # Parameters
-        self.n_step = 10
-        self.feature_dim = 11  # Total number of features to extract
+        self.n_step = 4
+        self.feature_dim = 10  # Total number of features to extract
         self.buffer = deque(maxlen=self.n_step)
 
         # ROS2 subscriptions and publishers
@@ -44,7 +44,7 @@ class DataProcessingNode(Node):
                 msg.imu.angular_velocity.z,
                 msg.imu.linear_acceleration.x,
                 msg.imu.linear_acceleration.y,
-                msg.imu.linear_acceleration.z
+                #msg.imu.linear_acceleration.z
             ]
 
             motor_data = [
