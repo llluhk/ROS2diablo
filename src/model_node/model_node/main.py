@@ -1,99 +1,93 @@
 import joblib
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Float32MultiArray, Int32  # 假设数据是数组类型, Int32 用于结果发布
+from std_msgs.msg import Float32MultiArray  # Still used for input
+from custom_msgs.msg import Collisionprediction
 import numpy as np
-import time 
+import time
 
-# 加载模型#### change path when delopy code on the robot
-MODEL_PATH = '/home/carrierbot/BA_Zhu/diablo_collision_ws/src/model_node/checkpoints/LinSVM_draft.pkl'
-#SCALER_PATH = "/home/pc/diablo_ws/src/model_node/checkpoints/scaler.joblib"
-
-try:
-    model = joblib.load(MODEL_PATH)
-    #scaler = joblib.load(SCALER_PATH)
-    print(" linsvm 模型和 MinMaxScaler 成功加载！")
-
-except Exception as e:
-    print(f"加载模型或 `scaler` 失败: {e}")
-    model = None
-    #scaler = None  # 避免程序崩溃
+# Paths (change if deploying to robot)
+MODEL_PATH = '/home/pc/diablo_collision_pc_ws/src/model_node/checkpoints/mlp.pkl'
+SCALER_PATH = "/home/pc/diablo_collision_pc_ws/src/model_node/checkpoints/scaler.pkl"
 
 class CollisionDetectionNode(Node):
     def __init__(self):
         super().__init__('collision_detection_node')
-        # 创建订阅器，订阅 /processed_data 话题
+
+        try:
+            self.model = joblib.load(MODEL_PATH)
+            self.scaler = joblib.load(SCALER_PATH)
+            self.get_logger().info("模型加载成功（MLP 和归一化器）")
+        except Exception as e:
+            self.get_logger().error(f"模型加载失败: {e}")
+            self.model = None
+            self.scaler = None
+
+        # Subscribe to preprocessed sensor data
         self.subscription = self.create_subscription(
             Float32MultiArray,
             '/processed_data',
             self.listener_callback,
             10
         )
-        # 创建发布器，当发生碰撞后发布/collision_prediction 话题包含碰撞结果
+
+        # Publish prediction as custom message
         self.publisher = self.create_publisher(
-            Int32, 
-            '/collision_prediction', 
+            Collisionprediction,
+            '/collision_prediction',
             10
         )
-        
-        self.subscription  # 防止变量被垃圾回收
+
+        self.durations = []
+        self.start_time = time.time()
         self.get_logger().info("Collision Detection Node 已启动，等待数据...")
-        self.durations=[]
-        self.start_time=time.time()
 
     def listener_callback(self, msg):
-        #self.get_logger().info("Listener callback triggered")
-        #if model is None or scaler is None:
-            #self.get_logger().error ("模型未加载，无法进行预测！")
+        if self.model is None or self.scaler is None:
+            self.get_logger().error("模型未加载，无法预测！")
+            return
 
-        # **转换 ROS2 消息数据为 NumPy 数组**
-        sensor_data = np.array(msg.data)  # ⚠️ 这里不要 reshape ！
+        # Convert message to numpy array
+        sensor_data = np.array(msg.data)
 
-        # **确保数据是 2D (1, n)，不多加一个维度**
-        if sensor_data.ndim == 1:  # 如果数据是一维 (n,)
-            sensor_data = sensor_data.reshape(1, -1)  # 变成 (1, n)
+        if sensor_data.ndim == 1:
+            sensor_data = sensor_data.reshape(1, -1)
 
-        # **打印转换后数据维度**
-        #self.get_logger().info(f"转换后数据维度: {sensor_data.shape}")
-
-        # 确保数据维度和模型匹配
-        expected_features = model.n_features_in_  
+        expected_features = self.model.n_features_in_
         if sensor_data.shape[1] != expected_features:
             self.get_logger().error(f"⚠️ 数据维度错误！期望 {expected_features} 维，实际 {sensor_data.shape[1]} 维")
             return
 
-        #try:
-            #sensor_data_scaled = scaler.transform(sensor_data)
-        #except Exception as e:
-            #self.get_logger().error(f"归一化失败: {e}")
-            #return
-        # 确保数据维度匹配
-        
         try:
+            sensor_data = self.scaler.transform(sensor_data)
+        except Exception as e:
+            self.get_logger().error(f"归一化失败: {e}")
+            return
 
+        try:
             start = time.perf_counter()
-            # 进行碰撞预测
-            prediction = model.predict(sensor_data)[0]  # 预测是否发生碰撞
-
+            prediction = self.model.predict(sensor_data)[0]
             end = time.perf_counter()
 
-            duration= (end - start)*1000
-            self.durations.append(duration) 
-            #self.get_logger().info(f"time: {duration:.3f}ms")
-            # **检查 prediction 是否是 1、2 或 3*
+            duration = (end - start) * 1000
+            self.durations.append(duration)
+
             if prediction in [1, 2, 3]:
-                prediction_msg = Int32()
-                prediction_msg.data = int(prediction)  # 强制转换为标准整数类型
-                self.get_logger().warn(f'碰撞检测: 发生碰撞！(类别: {prediction_msg.data})')
+                now = self.get_clock().now().to_msg()
+                prediction_msg = Collisionprediction()
+                prediction_msg.prediction = int(prediction)
+                prediction_msg.stamp = now
+
+                self.get_logger().warn(
+                    f"碰撞检测: 发生碰撞！(类别: {prediction} 时间: {now.sec}.{now.nanosec:09d})"
+                )
                 self.publisher.publish(prediction_msg)
-            #else:
-                #self.get_logger().info(f'碰撞检测: 无碰撞 (类别: {prediction})')
-                # 计算 30 秒的平均时间
+
             if time.time() - self.start_time >= 10:
                 avg_time = np.mean(self.durations)
                 self.get_logger().info(f"过去 10 秒的平均预测时间: {avg_time:.3f}ms")
-                self.durations = []  # 清空记录
-                self.start_time = time.time()  # 重置计时器
+                self.durations = []
+                self.start_time = time.time()
 
         except Exception as e:
             self.get_logger().error(f"预测错误: {e}")
@@ -105,6 +99,7 @@ def main(args=None):
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()

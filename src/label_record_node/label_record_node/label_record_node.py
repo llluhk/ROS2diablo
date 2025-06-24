@@ -1,99 +1,75 @@
 #!/usr/bin/env python3
 import rclpy
-import os
-import sys
-import tty
-import termios
-import threading
-import csv
-import time
-from datetime import datetime
 from rclpy.node import Node
-from sensor_msgs.msg import Imu
-
-print("Teleop start now!")
-print("Press '`' to exit!")
-print("Press 1 for front; 2 for left; 3 for right")
-
-keyQueue = []
-old_setting = termios.tcgetattr(sys.stdin)
+from std_msgs.msg import Int32MultiArray
+from custom_msgs.msg import Panel
 
 class TeleopNode(Node):
     def __init__(self):
         super().__init__("diablo_teleop_node")
-        self.last_imu_stamp = None
-        self.running = True  # Flag to control the keyboard thread
-        self.setup_csv()
-        self.setup_keyboard()
 
-    def setup_csv(self):
-        directory = "/home/pc/BA_data_record/"
-        os.makedirs(directory, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.csv_path = f"{directory}label_{timestamp}.csv"
-        with open(self.csv_path, mode='w', newline='') as csv_file:
-            csv_writer = csv.writer(csv_file)
-            csv_writer.writerow(['Key', 'Timestamp_sec', 'Timestamp_nanosec'])
+        self.label_pub = self.create_publisher(Int32MultiArray, 'collision_label', 10)
+        self.subscription = self.create_subscription(Panel, 'carrierbot/Panel', self.joystick_callback, 10)
 
-    def setup_keyboard(self):
-        self.key_thread = threading.Thread(target=self.getKeyBoard, daemon=False)  # Ensure the thread is stoppable
-        self.key_thread.start()
+        self.label_msg = Int32MultiArray()
 
-    def readchar(self):
-        fd = sys.stdin.fileno()
-        old_settings = termios.tcgetattr(fd)
-        try:
-            tty.setraw(fd)
-            ch = sys.stdin.read(1)
-        finally:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-        return ch
+        # Cooldown time to ignore repeated labels (in seconds)
+        self.cooldown = 1.0
+        self.last_publish_time = {}
 
-    def getKeyBoard(self):
-        global keyQueue
-        while self.running:
-            try:
-                c = self.readchar()
-                keyQueue.append(c)
-            except Exception as e:
-                break  # Exit thread on error
+        # Button state memory to detect rising edge
+        self.last_button_states = {
+            'up': 0,
+            'left': 0,
+            'right': 0,
+        }
 
-    def record_key_with_timestamp(self, key):
+    def joystick_callback(self, msg):
+        current_states = {
+            'up': msg.mainbuttons.upbutton,
+            'left': msg.mainbuttons.leftbutton,
+            'right': msg.mainbuttons.rightbutton,
+        }
+
         now = self.get_clock().now()
-        sec, nanosec = now.seconds_nanoseconds()
-        with open(self.csv_path, 'a', newline='') as csv_file:
-            csv_writer = csv.writer(csv_file)
-            csv_writer.writerow([key, sec, nanosec])
-        self.get_logger().info(f'Key "{key}" pressed. Timestamp: {sec}.{nanosec:09d}')
+        now_sec = now.nanoseconds * 1e-9
 
+        label = None
+        btn_name = None
+
+        # Detect rising edge and apply cooldown
+        for name, value in current_states.items():
+            if value == 1 and self.last_button_states[name] == 0:
+                temp_label = {'up': 1, 'left': 2, 'right': 3}[name]
+
+                # Check cooldown
+                last_time = self.last_publish_time.get(temp_label, 0.0)
+                if (now_sec - last_time) >= self.cooldown:
+                    label = temp_label
+                    btn_name = name
+                    break  # Only allow one label at a time
+
+        # Update button states
+        self.last_button_states = current_states
+
+        if label is not None:
+            sec, nsec = now.seconds_nanoseconds()
+            self.label_msg.data = [label, sec, nsec]
+            self.label_pub.publish(self.label_msg)
+            self.get_logger().info(f"Published Label {label} at {sec}.{nsec:09d}")
+            self.last_publish_time[label] = now_sec
 
 def main(args=None):
-    global keyQueue
     rclpy.init(args=args)
     node = TeleopNode()
 
     try:
-        while rclpy.ok():  # Use ROS2's loop check
-            if keyQueue:
-                key = keyQueue.pop(0)
-                if key == '`':  # Exit condition
-                    print("Exiting program...")
-                    break
-                if key in ['1', '2', '3']:
-                    node.record_key_with_timestamp(key)
-            time.sleep(0.02)
-
+        rclpy.spin(node)
     except KeyboardInterrupt:
-        print("\nKeyboardInterrupt detected. Shutting down...")
-
+        print("\nShutting down...")
     finally:
-        node.running = False  # Stop the keyboard thread
-        node.key_thread.join()  # Wait for the thread to exit
-        node.destroy_node()  # Clean up the node
-        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_setting)  # Restore terminal settings
+        node.destroy_node()
         rclpy.shutdown()
-        print("Exit!")
-
 
 if __name__ == '__main__':
     main()

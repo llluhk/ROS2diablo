@@ -25,6 +25,8 @@ class TimeSyncNode(Node):
         self.leg_motors_sub = Subscriber(self, LegMotors, 'synced/leg_motors')
         self.motion_ctrl_sub = Subscriber(self, MotionCtrlstamp, 'synced/motion_ctrl')
         self.imu_euler_sub = Subscriber(self, IMUEuler, 'synced/imu_euler')
+        # Print subscribed topics
+
 
         self.synced_data_publisher = self.create_publisher(SyncedData, 'synced_data', 10)
 
@@ -38,6 +40,7 @@ class TimeSyncNode(Node):
         self.time_sync.registerCallback(self.sync_callback)  # Fixed function name
 
     def sync_callback(self, imu_msg, motors_msg, motion_ctrl_msg, imu_euler_msg):
+        #self.get_logger().info("Received messages from sensors")
         unified_timestamp = self.get_clock().now()
 
         synced_data = SyncedData()
@@ -49,6 +52,11 @@ class TimeSyncNode(Node):
         synced_data.motion_ctrl = motion_ctrl_msg
 
         self.synced_data_publisher.publish(synced_data)
+        # Print publish confirmation
+        # self.get_logger().info(
+            #f"[Published] SyncedData at {synced_data.header.stamp.sec}."
+            #f"{synced_data.header.stamp.nanosec:09d}"
+        #)
 
 def main(args=None):
     rclpy.init(args=args)

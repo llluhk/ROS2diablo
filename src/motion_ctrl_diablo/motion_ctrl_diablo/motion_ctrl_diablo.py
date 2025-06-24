@@ -8,7 +8,7 @@ class Motionctrl_diablo(Node):
         super().__init__('motionctrl_diablo')
         self.panel_sub = self.create_subscription(Panel, '/carrierbot/Panel', self.listener_callback_panel, 10)
         # Subscribe to '/carrierbot/Panel' topic, process joystick signals
-        self.mctrl_pub = self.create_publisher(MotionCtrl, '/diablo/MotionCmd', 10)
+        self.mctrl_pub = self.create_publisher(MotionCtrl, '/diablo/MotionCmd_joystick', 10)
         self.timer = self.create_timer(0.05, self.on_timer)
         self.cur_forw_vel_panel = 0
         self.cur_angl_vel_panel = 0
@@ -34,8 +34,8 @@ class Motionctrl_diablo(Node):
         self.mctrl_msg.value.pitch = 0.0
         # Handle forward control if joystick inputs are active
         if self.cur_forw_vel_panel != 0 or self.cur_angl_vel_panel != 0:
-            self.get_logger().info(f"Joystick input: Forward: {self.cur_forw_vel_panel}, Angular: {self.cur_angl_vel_panel}")
-            self.get_logger().info(f"Joystick input: {self.joystick}")
+            #self.get_logger().info(f"Joystick input: Forward: {self.cur_forw_vel_panel}, Angular: {self.cur_angl_vel_panel}")
+            #self.get_logger().info(f"Joystick input: {self.joystick}")
 
             self.mctrl_msg.value.forward = float(self.cur_forw_vel_panel)
             self.mctrl_msg.value.left = float(self.cur_angl_vel_panel) 

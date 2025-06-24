@@ -33,21 +33,22 @@ if(BUILD_TESTING)
 endif()
 
 # 找到必要的依赖
-find_package(std_msgs REQUIRED)
 find_package(ament_cmake REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(sensor_msgs REQUIRED)  # 确保 sensor_msgs 已声明
 find_package(motion_msgs REQUIRED)
 find_package(ception_msgs REQUIRED)
+find_package(builtin_interfaces REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/Collisionprediction.msg"
   "msg/SyncedData.msg"
   "msg/Joystick.msg"
   "msg/MainButtons.msg"
   "msg/Panel.msg"
   "msg/SideButtons.msg"
   
-  DEPENDENCIES sensor_msgs motion_msgs ception_msgs std_msgs
+  DEPENDENCIES sensor_msgs motion_msgs ception_msgs std_msgs builtin_interfaces
 )
 
 

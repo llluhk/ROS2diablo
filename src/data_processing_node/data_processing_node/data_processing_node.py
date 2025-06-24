@@ -2,78 +2,91 @@ import numpy as np
 from collections import deque
 import rclpy
 from rclpy.node import Node
-from custom_msgs.msg import SyncedData  # 替换为自定义消息类型
-from std_msgs.msg import Float32MultiArray  # 发布处理后的数组
+from custom_msgs.msg import SyncedData  # Replace with your actual message type
+from std_msgs.msg import Float32MultiArray
 
 class DataProcessingNode(Node):
     def __init__(self):
         super().__init__('data_processing_node')
 
-        # 数据维度
-        self.feature_dim = 33  # 只处理原始特征
-        self.data_buffer = deque(maxlen=50)  # 滑动窗口（可选，当前不使用）
+        # Parameters
+        self.n_step = 10
+        self.feature_dim = 11  # Total number of features to extract
+        self.buffer = deque(maxlen=self.n_step)
 
-        # 订阅 /synced_data 话题
+        # ROS2 subscriptions and publishers
         self.subscription = self.create_subscription(
             SyncedData, '/synced_data', self.data_callback, 100
         )
-
-        # 发布处理后的滑动窗口数据
         self.publisher = self.create_publisher(Float32MultiArray, '/processed_data', 10)
 
+        self.get_logger().info("DataProcessingNode initialized and waiting for /synced_data...")
+
     def data_callback(self, msg):
-        """处理 `/synced_data` 消息，直接提取并发布 `raw_features` (1, 33)"""
+        self.get_logger().info("Received message from /synced_data")
 
-        # **提取原始特征**
         raw_features = self.extract_features(msg).reshape(1, -1)
-        print(f"[INFO] raw_features.shape: {raw_features.shape}")  # **(1, 33)**
+        self.get_logger().info(f"Extracted features shape: {raw_features.shape}, features: {raw_features.tolist()}")
 
-        # **发布数据**
-        self.publish_single_sample(raw_features)
+        self.buffer.append(raw_features)
+        self.get_logger().info(f"Updated buffer size: {len(self.buffer)} / {self.n_step}")
+
+        if len(self.buffer) >= self.n_step:
+            window = list(self.buffer)[-self.n_step:]
+            combined = np.concatenate(window, axis=1)
+            self.get_logger().info(f"Publishing processed window with shape: {combined.shape}")
+            self.publish_single_sample(combined)
 
     def extract_features(self, msg):
-        """从 `/synced_data` 提取 33 维原始特征"""
-        imu_data = [
-            msg.imu.orientation.x, msg.imu.orientation.y, msg.imu.orientation.z, msg.imu.orientation.w,
-            msg.imu.angular_velocity.x, msg.imu.angular_velocity.y, msg.imu.angular_velocity.z,
-            msg.imu.linear_acceleration.x, msg.imu.linear_acceleration.y, msg.imu.linear_acceleration.z
-        ]
+        try:
+            imu_data = [
+                msg.imu.angular_velocity.y,
+                msg.imu.angular_velocity.z,
+                msg.imu.linear_acceleration.x,
+                msg.imu.linear_acceleration.y,
+                msg.imu.linear_acceleration.z
+            ]
 
-        motor_data = [
-            msg.leg_motors.left_hip_vel, msg.leg_motors.left_hip_iq,
-            msg.leg_motors.left_knee_vel, msg.leg_motors.left_knee_iq,
-            msg.leg_motors.left_wheel_vel, msg.leg_motors.left_wheel_iq,
-            msg.leg_motors.right_hip_vel, msg.leg_motors.right_hip_iq,
-            msg.leg_motors.right_knee_vel, msg.leg_motors.right_knee_iq,
-            msg.leg_motors.right_wheel_vel, msg.leg_motors.right_wheel_iq,
-            msg.leg_motors.left_leg_length, msg.leg_motors.right_leg_length
-        ]
+            motor_data = [
+                msg.leg_motors.left_wheel_vel,
+                msg.leg_motors.left_wheel_iq,
+                msg.leg_motors.right_wheel_vel,
+                msg.leg_motors.right_wheel_iq
+            ]
 
-        imu_euler_data = [msg.imu_euler.roll, msg.imu_euler.pitch, msg.imu_euler.yaw]
-        motion_ctrl_data = [
-            msg.motion_ctrl.motion_ctrl.value.forward, msg.motion_ctrl.motion_ctrl.value.left, msg.motion_ctrl.motion_ctrl.value.up,
-            msg.motion_ctrl.motion_ctrl.value.roll, msg.motion_ctrl.motion_ctrl.value.pitch, msg.motion_ctrl.motion_ctrl.value.leg_split
-        ]
+            motion_ctrl_data = [
+                msg.motion_ctrl.motion_ctrl.value.forward,
+                msg.motion_ctrl.motion_ctrl.value.left
+            ]
 
-        # 合并所有特征
-        features = imu_data + motor_data + imu_euler_data + motion_ctrl_data
-        assert len(features) == self.feature_dim, f"特征维度不匹配，期望 {self.feature_dim}，但得到 {len(features)}"
-        
-        print(f"[INFO] extract_features output shape: {np.array(features).shape}")  # **(33,)**
-        return np.array(features, dtype=np.float32)
+            features = imu_data + motor_data + motion_ctrl_data
+
+            if len(features) != self.feature_dim:
+                self.get_logger().error(
+                    f"Feature length mismatch: expected {self.feature_dim}, got {len(features)}"
+                )
+
+            return np.array(features, dtype=np.float32)
+
+        except Exception as e:
+            self.get_logger().error(f"Error extracting features: {str(e)}")
+            return np.zeros((self.feature_dim,), dtype=np.float32)
 
     def publish_single_sample(self, sample):
-        """将单条数据 (1, 33) 发布为 Float32MultiArray"""
         msg = Float32MultiArray()
         msg.data = sample.flatten().tolist()
         self.publisher.publish(msg)
-        #self.get_logger().info(f"Published single sample with shape: {sample.shape}")
+        self.get_logger().info(f"Published Float32MultiArray with length {len(msg.data)}")
 
 def main(args=None):
     rclpy.init(args=args)
     node = DataProcessingNode()
-    rclpy.spin(node)
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        node.get_logger().info("Shutting down node.")
+    finally:
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>escape_node</name>
+  <version>0.0.0</version>
+  <description>TODO: Package description</description>
+  <maintainer email="pc@todo.todo">pc</maintainer>
+  <license>TODO: License declaration</license>
+
+    <!-- 运行时依赖 -->
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>motion_msgs</depend>
+  <depend>custom_msgs</depend>  <!-- ✅ 添加这一行 -->
+  <depend>builtin_interfaces</depend> <!-- ✅ 如果 msg 中包含 stamp (time) 字段 -->
+  <exec_depend>python3-numpy</exec_depend>
+
+
+
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

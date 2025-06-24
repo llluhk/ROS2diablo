@@ -10,8 +10,8 @@ class CurrentInput(Node):
         super().__init__('current_input')
         self.panel_pub = self.create_publisher(Panel, 'carrierbot/Panel', 10)
         #创建发布器用于发布名为carrierbot/Panel topic.
-        self.declare_parameter('serial_port', '/dev/ttyUSB1')
-        #声明一个参数来设置串口连接：/dev/ttyUSB1是ROS2默认USB串口设备路径
+        self.declare_parameter('serial_port', '/dev/ttyUSB0')
+        #声明一个参数来设置串口连接：/dev/ttyUSB1 是ROS2默认USB串口设备路径
         # 登陆DIABLO，连接USB后通过： dmesg | grep tty  获取设备路径
         self.serial_port = self.get_parameter('serial_port').get_parameter_value().string_value
         #这行代码获取刚才声明的参数，并将其转换成字符串类型
