@@ -14,7 +14,7 @@ class Motionctrl_diablo(Node):
         self.cur_angl_vel_panel = 0
         self.joystick=0
 
-        self.max_forw = 1.0
+        self.max_forw = 0.1
         self.max_ang = 1.0
         self.mctrl_msg = MotionCtrl()
 

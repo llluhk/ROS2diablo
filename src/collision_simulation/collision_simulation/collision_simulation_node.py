@@ -7,7 +7,7 @@ class CollisionSimulation(Node):
     def __init__(self):
         super().__init__('collision_simulation')
 
-        self.mctrl_pub = self.create_publisher(MotionCtrl, '/diablo/MotionCmd', 10)
+        self.mctrl_pub = self.create_publisher(MotionCtrl, '/diablo/MotionCmd_experiment', 10)
         self.mctrl_msg = MotionCtrl()
 
         # Record start time
@@ -33,7 +33,7 @@ class CollisionSimulation(Node):
     def on_timer(self):
         # Check if 5 seconds have passed since start
         elapsed_time = self.get_clock().now() - self.start_time
-        if elapsed_time > Duration(seconds=2.0):
+        if elapsed_time > Duration(seconds=3.0):
             self.get_logger().info('5 seconds elapsed. Stopping robot and shutting down node.')
 
             # Stop the robot by setting forward speed to 0
@@ -48,7 +48,7 @@ class CollisionSimulation(Node):
         self.mctrl_msg.mode.pitch_ctrl_mode = True
         self.mctrl_msg.value.up = 1.0
         self.mctrl_msg.value.pitch = 0.0
-        self.mctrl_msg.value.forward = 0.8 # Move backward
+        self.mctrl_msg.value.forward = 0.5 # Move backward
 
         self.mctrl_pub.publish(self.mctrl_msg)
         self.get_logger().info('Publishing motion command...')
